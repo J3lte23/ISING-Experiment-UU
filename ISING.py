@@ -31,7 +31,7 @@ def change_spin(state):
     y = random.randint(0,n-1)
     s_i = -state[x,y]
     neighbours = [state[(x + 1)%n, y], state[(x - 1)%n, y], state[x, (y + 1)%n], state[x, (y - 1)%n]]
-    E = E_t
+    E = E_t/2
     for elem in neighbours:
         E += - J * s_i * neighbours[elem]  
         D_E = E
