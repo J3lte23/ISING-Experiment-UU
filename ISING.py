@@ -12,13 +12,15 @@ n = 5
 state = 2*np.random.randint(2, size=(n,n))-1
 
 def total_energy():
-    E = 0
-    for x in range(n-1):
-        for y in range(n-1):
+    E_t = 0
+    for x in range(n):
+        for y in range(n):
             neighbours = [state[(x + 1)%n, y], state[(x - 1)%n, y], state[x, (y + 1)%n], state[x, (y - 1)%n]]
             s_i = state[x,y]
             for neighbour in neighbours:
-                E += - J * s_i * neighbours[neighbour]
+                E_t += - J * s_i * neighbours[neighbour]
+    return E_t
+    
             
 
 plt.imshow(state, origin='upper')
@@ -29,7 +31,7 @@ def change_spin(state):
     y = random.randint(0,n-1)
     s_i = -state[x,y]
     neighbours = [state[(x + 1)%n, y], state[(x - 1)%n, y], state[x, (y + 1)%n], state[x, (y - 1)%n]]
-    E = 0
+    E = E_t
     for elem in neighbours:
         E += - J * s_i * neighbours[elem]  
         D_E = E
@@ -48,7 +50,7 @@ def change_spin(state):
     plt.imshow(state, origin='upper')
     plt.pause(0.1)
 
-
+total_energy()
 for i in range(10):
     change_spin(state)
 
