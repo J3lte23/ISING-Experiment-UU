@@ -19,6 +19,7 @@ def total_energy():
             s_i = state[x,y]
             for neighbour in neighbours:
                 E_t += - J * s_i * neighbours[neighbour]
+                E_t *= 0.5
     return E_t
     
             
@@ -31,7 +32,7 @@ def change_spin(state):
     y = random.randint(0,n-1)
     s_i = -state[x,y]
     neighbours = [state[(x + 1)%n, y], state[(x - 1)%n, y], state[x, (y + 1)%n], state[x, (y - 1)%n]]
-    E = E_t/2
+    E = E_t
     for elem in neighbours:
         E += - J * s_i * neighbours[elem]  
         D_E = E
