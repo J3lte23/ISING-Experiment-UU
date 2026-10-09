@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 
 k_B = 1.380649e-23 #m^2 kg s^-2 K^-1
 
-T_red = 0.5
+T_red = 10
 J_red = 1
 J = 1/T_red
 T = T_red*J/k_B
@@ -15,9 +15,12 @@ T = T_red*J/k_B
 n = 20
 
 
-#state = 2*np.random.randint(2, size=(n,n))-1
-state = np.random.choice([-1, 1], size=(n, n), p=[0.2, 0.8])
+state = 2*np.random.randint(2, size=(n,n))-1
+#state = np.random.choice([-1, 1], size=(n, n), p=[0.2, 0.8])
 
+E_t_list = np.array([])
+E_t_av_list = np.array([])
+E_t_2_list = np.array([])
 
 def total_energy():
     global E_t
@@ -29,17 +32,8 @@ def total_energy():
             for neighbour in neighbours:
                 E_t += - J * s_i * neighbour
     E_t *= 0.5
-    print(E_t)
+    #print(E_t)
     return E_t
-    
-        
-
-plt.imshow(
-    state, 
-    origin='upper',
-    cmap='Grays'
-)
-plt.pause(0.2)
 
 def change_spin(state):
     global E_t
@@ -49,25 +43,46 @@ def change_spin(state):
     D_E = 2 * J * state[x,y] * np.sum(neighbours)
     if D_E < 0:
         state[x,y] *= -1
-        print('Success')
+        #print('Success')
         E_t += D_E
     elif random.random() < np.exp(-D_E / (k_B * T)):
         state[x, y] *= -1
-        print('Success Accept')
+        #print('Success Accept')
         E_t += D_E
     else:
-        print('Fail')
+        #print('Fail')
+        pass
+# =============================================================================
+#     plt.imshow(
+#         state, 
+#         origin='upper', 
+#         cmap='Grays'
+#     )
+#     plt.pause(0.00001)
+# =============================================================================
+    
+plt.imshow(
+    state, 
+    origin='upper',
+    cmap='Grays'
+)
+plt.pause(0.2)
+
+for i in range(10):
+    total_energy()
+    for i in range(100):
+        for i in range(10000):
+            change_spin(state)
+        E_t_list = np.append(E_t_list, E_t)
+    E_t_av_list = np.append(E_t_av_list, np.mean(E_t_list))
+    E_t_2_list = np.append(E_t_2_list, np.mean(E_t_list**2))
+    E_t_list = np.array([])
     plt.imshow(
         state, 
-        origin='upper', 
+        origin='upper',
         cmap='Grays'
     )
-    plt.pause(0.00001)
-
-total_energy()
-for i in range(1e3):
-    change_spin(state)
-print(E_t)
+print(E_t_av_list)
 
 m = (1/(n**2)) * np.sum(state)
 print(m)
