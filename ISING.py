@@ -19,8 +19,10 @@ state = 2*np.random.randint(2, size=(n,n))-1
 #state = np.random.choice([-1, 1], size=(n, n), p=[0.2, 0.8])
 
 E_t_list = np.array([])
-E_t_av_list = np.array([])
-E_t_2_list = np.array([])
+m_list = np.array([])
+av_E_t = np.array([])
+av_E_t_2 = np.array([])
+av_m = np.array([])
 
 def total_energy():
     global E_t
@@ -43,14 +45,11 @@ def change_spin(state):
     D_E = 2 * J * state[x,y] * np.sum(neighbours)
     if D_E < 0:
         state[x,y] *= -1
-        #print('Success')
         E_t += D_E
     elif random.random() < np.exp(-D_E / (k_B * T)):
         state[x, y] *= -1
-        #print('Success Accept')
         E_t += D_E
     else:
-        #print('Fail')
         pass
 # =============================================================================
 #     plt.imshow(
@@ -74,15 +73,15 @@ for i in range(10):
         for i in range(10000):
             change_spin(state)
         E_t_list = np.append(E_t_list, E_t)
-    E_t_av_list = np.append(E_t_av_list, np.mean(E_t_list))
-    E_t_2_list = np.append(E_t_2_list, np.mean(E_t_list**2))
+        m_list = np.append(m_list, np.mean(state))
+        
+    av_E_t = np.append(av_E_t, np.mean(E_t_list))
+    av_E_t_2 = np.append(av_E_t_2, np.mean(E_t_list**2))
+    av_m = np.append(av_m, np.mean(m_list))
+    
     E_t_list = np.array([])
     plt.imshow(
         state, 
         origin='upper',
         cmap='Grays'
     )
-print(E_t_av_list)
-
-m = (1/(n**2)) * np.sum(state)
-print(m)
