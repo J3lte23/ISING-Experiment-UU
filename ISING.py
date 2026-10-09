@@ -7,10 +7,12 @@ from matplotlib import pyplot as plt
 
 k_B = 1.380649e-23 #m^2 kg s^-2 K^-1
 
-T_red = 10
+T_red = 2.27
 J_red = 1/T_red
 J = 1
 T = T_red*J/k_B
+
+beta = 1/(k_B*T)
 
 n = 100
 
@@ -24,6 +26,7 @@ av_E_t = np.array([])
 av_E_t_2 = np.array([])
 av_m = np.array([])
 av_abs_m = np.array([])
+av_cap = np.array([])
 
 def total_energy():
     global E_t
@@ -52,7 +55,7 @@ def change_spin(state):
     else:
         pass
 
-for run in range(10):
+for run in range(3):
     state = 2*np.random.randint(2, size=(n,n))-1
     total_energy()
     plt.imshow(
@@ -78,6 +81,7 @@ for run in range(10):
     av_E_t_2 = np.append(av_E_t_2, np.mean(E_t_list**2))
     av_m = np.append(av_m, np.mean(m_list))   
     av_abs_m = np.append(av_abs_m, np.mean(np.abs(m_list)))
+    av_cap = np.append(av_cap, k_B*beta**2*(np.mean(E_t_list**2)-np.mean(E_t_list)**2))
     
     E_t_list = np.array([])
     
