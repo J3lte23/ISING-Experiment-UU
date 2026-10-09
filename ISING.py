@@ -89,3 +89,9 @@ print(av_E_t)
 print(av_E_t_2)
 print(av_m)
 print(av_abs_m)
+#%%
+#determine T_red/T_c
+t_red_arr= np.linspace(0,10, num=50)/2.27
+ 
+c_arr = 8*k_B/np.pi*(1/8*J)**2*np.log(np.abs(1/(t_red_arr-1)))
+plt.plot(t_red_arr,c_arr)
