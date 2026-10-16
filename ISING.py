@@ -5,14 +5,14 @@ from matplotlib import pyplot as plt
 
 #Use seed for report
 
-steps = 21
+steps = 41
 mask = 50
 
 T_c = 2/np.log(1+np.sqrt(2)) 
 
 T_red_space = np.linspace(0.7, 1.3, steps)*T_c
 
-n = 50
+n = 30
 
 E_t_list = np.array([])
 m_list = np.array([])
@@ -21,6 +21,7 @@ av_E_t_unc = np.array([])
 av_E_t_2 = np.array([])
 av_m = np.array([])
 av_m_unc = np.array([])
+av_abs_m_unc = np.array([])
 av_m_2 = np.array([])
 av_abs_m = np.array([])
 av_cap = np.array([])
@@ -97,6 +98,7 @@ for run in range(len(T_red_space)):
     av_cap = np.append(av_cap, (np.log(1 + np.sqrt(2)) / 2)**2*(np.mean(E_t_list[mask:]**2)-np.mean(E_t_list[mask:])**2))
     
     av_E_t_unc = np.append(av_E_t_unc, np.std(E_t_list[mask:]))
+    av_abs_m_unc = np.append(av_abs_m_unc, np.std(np.abs(m_list[mask:])))
     av_m_unc = np.append(av_m_unc, np.std(m_list[mask:]))
     
     E_t_list = np.array([])
@@ -207,7 +209,10 @@ plt.plot(
     label='Exact theoretical model'
 )
 
+plt.show()
+
 #%%
+
 
 plt.plot(
     T_red_space/T_c,
