@@ -1,18 +1,16 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-#np.random.seed(100)
+np.random.seed(100)
 
-#Use seed for report
-
-steps = 41
-mask = 50
+steps = 11
+mask = 8000
 
 T_c = 2/np.log(1+np.sqrt(2)) 
 
 T_red_space = np.linspace(0.7, 1.3, steps)*T_c
 
-n = 30
+n = 10
 
 E_t_list = np.array([])
 m_list = np.array([])
@@ -57,52 +55,39 @@ for run in range(len(T_red_space)):
     T = T_red_space[run]
 
     print(T_red_space[run]/T_c)
-    
-    state = 2*np.random.randint(2, size=(n,n))-1
-    
-# =============================================================================
-#     state = np.ones_like(state)
-# =============================================================================
 
     total_energy()
-    
-# =============================================================================
-#     plt.imshow(
-#         state, 
-#         origin='upper',
-#         cmap='Grays'
-#     )
-#     plt.pause(0.001)
-# =============================================================================
 
-    for i in range(100):
-        for i in range(10000):
-            change_spin(state)
-        E_t_list = np.append(E_t_list, E_t)
-        m_list = np.append(m_list, np.mean(state))
+    for i in range(20):
+        state = 2*np.random.randint(2, size=(n,n))-1
         
 # =============================================================================
-#         plt.imshow(
-#             state, 
-#             origin='upper',
-#             cmap='Grays'
-#         )
-#         plt.pause(0.001)
-#         
+#         state = np.ones_like(state)
 # =============================================================================
-    av_E_t = np.append(av_E_t, np.mean(E_t_list[mask:]))
-    av_E_t_2 = np.append(av_E_t_2, np.mean(E_t_list[mask:]**2))
-    av_m = np.append(av_m, np.mean(m_list[mask:])) 
-    av_m_2 = np.append(av_m_2, np.mean(m_list[mask:]**2))
-    av_abs_m = np.append(av_abs_m, np.mean(np.abs(m_list[mask:])))
-    av_cap = np.append(av_cap, (np.log(1 + np.sqrt(2)) / 2)**2*(np.mean(E_t_list[mask:]**2)-np.mean(E_t_list[mask:])**2))
-    
-    av_E_t_unc = np.append(av_E_t_unc, np.std(E_t_list[mask:]))
-    av_abs_m_unc = np.append(av_abs_m_unc, np.std(np.abs(m_list[mask:])))
-    av_m_unc = np.append(av_m_unc, np.std(m_list[mask:]))
-    
-    E_t_list = np.array([])
-    m_list = np.array([])
+        for i in range(10000):
+            change_spin(state)
+            E_t_list = np.append(E_t_list, E_t)
+            m_list = np.append(m_list, np.mean(state))
+        
+        plt.imshow(
+            state, 
+            origin='upper',
+            cmap='Grays'
+        )
+        plt.pause(0.001)
+        
+        av_E_t = np.append(av_E_t, np.mean(E_t_list[mask:]))
+        av_E_t_2 = np.append(av_E_t_2, np.mean(E_t_list[mask:]**2))
+        av_m = np.append(av_m, np.mean(m_list[mask:])) 
+        av_abs_m = np.append(av_abs_m, np.mean(np.abs(m_list[mask:])))
+        av_cap = np.append(av_cap, (np.log(1 + np.sqrt(2)) / 2)**2*(np.mean(E_t_list[mask:]**2)-np.mean(E_t_list[mask:])**2))
+        
+        av_E_t_unc = np.append(av_E_t_unc, np.std(E_t_list[mask:]))
+        av_abs_m_unc = np.append(av_abs_m_unc, np.std(np.abs(m_list[mask:])))
+        av_m_unc = np.append(av_m_unc, np.std(m_list[mask:]))
+            
+        E_t_list = np.array([])
+        m_list = np.array([])
 
 unc_list = np.sqrt(av_E_t_2 - av_E_t**2)
 
@@ -137,6 +122,7 @@ plt.plot(T_red_plt,
          c_arr, 
          label='Theoretical Model'
 )
+
 plt.xlabel(r'$T/T_c$')
 plt.ylabel(r'$C/(Nk_B)$')
 plt.legend()
@@ -160,7 +146,7 @@ M_theory = (
 plt.errorbar(
     T_red_space / T_c,
     av_abs_m,
-    yerr=av_m_unc,
+    yerr=av_abs_m_unc,
     fmt='o',
     label='Monte Carlo'
 )
@@ -181,43 +167,51 @@ plt.tight_layout()
 plt.show()
 
 #%%
-
-T_red_plt = np.linspace(0.01, 1.4, 1000)
-
-beta_mag = 1/8
-
-M_theory = np.zeros_like(T_red_plt)
-
-below_Tc = T_red_plt < 1
-T_actual = T_red_plt[below_Tc] * T_c
-
-M_theory = (
-    1 - T_red_plt
-)**beta_mag
-
-plt.errorbar(
-    T_red_space / T_c,
-    av_m,
-    yerr=av_m_unc,
-    fmt='o',
-    label='Monte Carlo'
-)
-
-plt.plot(
-    T_red_plt,
-    M_theory,
-    label='Exact theoretical model'
-)
-
-plt.show()
+#Useless plot
+# =============================================================================
+# T_red_plt = np.linspace(0.01, 1.4, 1000)
+# 
+# beta_mag = 1/8
+# 
+# M_theory = np.zeros_like(T_red_plt)
+# 
+# below_Tc = T_red_plt < 1
+# T_actual = T_red_plt[below_Tc] * T_c
+# 
+# M_theory = (
+#     1 - T_red_plt
+# )**beta_mag
+# 
+# plt.errorbar(
+#     T_red_space / T_c,
+#     av_m,
+#     yerr=av_m_unc,
+#     fmt='o',
+#     label='Monte Carlo'
+# )
+# 
+# plt.plot(
+#     T_red_plt,
+#     M_theory,
+#     label='Exact theoretical model'
+# )
+# 
+# plt.show()
+# =============================================================================
 
 #%%
 
 
 plt.plot(
-    T_red_space/T_c,
+    T_red_space,
     av_E_t,
-    label='Exact theoretical model'
+)
+
+f_E = 4*J*np.sinh(4*beta_c*J)/(3+np.cosh(4*beta_c*J))
+
+plt.plot(
+    T_red_space,
+    f_E
 )
 
 plt.errorbar(
