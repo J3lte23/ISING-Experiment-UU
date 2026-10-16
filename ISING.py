@@ -1,30 +1,24 @@
 import numpy as np
-import random
 from matplotlib import pyplot as plt
 
+#np.random.seed(100)
 
 #Use seed for report
 
-k_B = 1.380649e-23 #m^2 kg s^-2 K^-1
+steps = 11
 
-T_red = 2.27
-J_red = 1/T_red
-J = 1
-T = T_red*J/k_B
+T_c = 2/np.log(1+np.sqrt(2)) 
 
-beta = 1/(k_B*T)
+T_red_space = np.linspace(0.7, 1.3, steps)*T_c
 
-n = 100
-
-
-#state = 2*np.random.randint(2, size=(n,n))-1
-#state = np.random.choice([-1, 1], size=(n, n), p=[0.2, 0.8])
+n = 20
 
 E_t_list = np.array([])
 m_list = np.array([])
 av_E_t = np.array([])
 av_E_t_2 = np.array([])
 av_m = np.array([])
+av_m_2 = np.array([])
 av_abs_m = np.array([])
 av_cap = np.array([])
 
@@ -41,57 +35,131 @@ def total_energy():
 
 def change_spin(state):
     global E_t
-    x = random.randint(0,n-1)
-    y = random.randint(0,n-1)
+    x = np.random.randint(0,n)
+    y = np.random.randint(0,n)
     neighbours = [state[(x+1)%n, y], state[(x-1)%n, y], state[x, (y+1)%n], state[x, (y-1)%n]]
-    #Trust
     D_E = 2 * J * state[x,y] * np.sum(neighbours)
     if D_E < 0:
         state[x,y] *= -1
         E_t += D_E
-    elif random.random() < np.exp(-D_E / (k_B * T)):
+    elif np.random.random() < np.exp(-1 * D_E / T):
         state[x, y] *= -1
         E_t += D_E
     else:
         pass
 
-for run in range(3):
+for run in range(len(T_red_space)):
+    J = 1 #J
+    T = T_red_space[run]
+
+    print(T_red_space[run]/T_c)
+    
     state = 2*np.random.randint(2, size=(n,n))-1
     total_energy()
-    plt.imshow(
-        state, 
-        origin='upper',
-        cmap='Grays'
-    )
-    plt.pause(0.001)
+    
+# =============================================================================
+#     plt.imshow(
+#         state, 
+#         origin='upper',
+#         cmap='Grays'
+#     )
+#     plt.pause(0.001)
+# =============================================================================
+
     for i in range(100):
         for i in range(10000):
             change_spin(state)
         E_t_list = np.append(E_t_list, E_t)
         m_list = np.append(m_list, np.mean(state))
         
-        plt.imshow(
-            state, 
-            origin='upper',
-            cmap='Grays'
-        )
-        plt.pause(0.001)
+# =============================================================================
+#         plt.imshow(
+#             state, 
+#             origin='upper',
+#             cmap='Grays'
+#         )
+#         plt.pause(0.001)
+# =============================================================================
         
-    av_E_t = np.append(av_E_t, np.mean(E_t_list))
-    av_E_t_2 = np.append(av_E_t_2, np.mean(E_t_list**2))
-    av_m = np.append(av_m, np.mean(m_list))   
-    av_abs_m = np.append(av_abs_m, np.mean(np.abs(m_list)))
-    av_cap = np.append(av_cap, k_B*beta**2*(np.mean(E_t_list**2)-np.mean(E_t_list)**2))
+    av_E_t = np.append(av_E_t, np.mean(E_t_list[30:]))
+    av_E_t_2 = np.append(av_E_t_2, np.mean(E_t_list[30:]**2))
+    av_m = np.append(av_m, np.mean(m_list[30:])) 
+    av_m_2 = np.append(av_m_2, np.mean(m_list[30:]**2))
+    av_abs_m = np.append(av_abs_m, np.mean(np.abs(m_list[30:])))
+    av_cap = np.append(av_cap, (np.log(1 + np.sqrt(2)) / 2)**2*(np.mean(E_t_list[30:]**2)-np.mean(E_t_list[30:])**2))
     
     E_t_list = np.array([])
-    
+    m_list = np.array([])
+
+unc_list = np.sqrt(av_E_t_2 - av_E_t**2)
+
 print(av_E_t)
 print(av_E_t_2)
 print(av_m)
 print(av_abs_m)
+print(av_cap)
+
+print(unc_list)
+
+C_unc = np.sqrt(np.mean(av_cap**2) - np.mean(av_cap)**2)/np.sqrt(len(av_cap))
+
 #%%
-#determine T_red/T_c
-t_red_arr= np.linspace(0,10, num=50)/2.27
- 
-c_arr = 8*k_B/np.pi*(1/8*J)**2*np.log(np.abs(1/(t_red_arr-1)))
-plt.plot(t_red_arr,c_arr)
+
+T_red_plt = np.linspace(0.6, 1.4, num=100000)
+
+beta_c = np.log(1 + np.sqrt(2)) / 2
+
+c_arr = (
+    8 / np.pi * (beta_c * J)**2
+    * np.log(1 / np.abs(T_red_plt - 1))
+)
+
+plt.axvline(1, color='red', linestyle='--', label='Critical Temperature T_c')
+
+for run in range(len(T_red_space)):
+    plt.scatter(T_red_space[run] / T_c, av_cap[run] / n**2)
+    plt.errorbar(T_red_space[run] / T_c, av_cap[run] / n**2, yerr=C_unc/n**2)
+
+plt.plot(T_red_plt, c_arr, label='Theoretical Model')
+plt.xlabel(r'$T/T_c$')
+plt.ylabel(r'$C/(Nk_B)$')
+plt.legend()
+plt.show()
+
+#%%
+
+T_red_plt = np.linspace(0.01, 1.4, 1000)
+
+beta_mag = 1/8
+
+M_theory = np.zeros_like(T_red_plt)
+
+below_Tc = T_red_plt < 1
+T_actual = T_red_plt[below_Tc] * T_c
+
+M_theory[below_Tc] = (
+    1 - np.sinh(2 * J / T_actual)**(-4)
+)**beta_mag
+
+plt.errorbar(
+    T_red_space / T_c,
+    av_abs_m,
+    yerr=np.sqrt(av_m_2 - av_m**2)/np.sqrt(len(av_m)),
+    fmt='o',
+    label='Monte Carlo'
+)
+
+plt.plot(
+    T_red_plt,
+    M_theory,
+    label='Exact theoretical model'
+)
+
+plt.axvline(1, color='red', linestyle='--', label=r'$T_c$')
+plt.xlabel(r'$T/T_c$')
+plt.ylabel(r'$|M|/N$')
+plt.xlim(0.6, 1.4)
+plt.ylim(bottom=0)
+plt.legend()
+plt.tight_layout()
+plt.show()
