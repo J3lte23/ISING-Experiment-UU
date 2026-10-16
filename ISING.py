@@ -17,8 +17,10 @@ n = 50
 E_t_list = np.array([])
 m_list = np.array([])
 av_E_t = np.array([])
+av_E_t_unc = np.array([])
 av_E_t_2 = np.array([])
 av_m = np.array([])
+av_m_unc = np.array([])
 av_m_2 = np.array([])
 av_abs_m = np.array([])
 av_cap = np.array([])
@@ -56,6 +58,11 @@ for run in range(len(T_red_space)):
     print(T_red_space[run]/T_c)
     
     state = 2*np.random.randint(2, size=(n,n))-1
+    
+# =============================================================================
+#     state = np.ones_like(state)
+# =============================================================================
+
     total_energy()
     
 # =============================================================================
@@ -68,7 +75,7 @@ for run in range(len(T_red_space)):
 # =============================================================================
 
     for i in range(100):
-        for i in range(50000):
+        for i in range(10000):
             change_spin(state)
         E_t_list = np.append(E_t_list, E_t)
         m_list = np.append(m_list, np.mean(state))
@@ -89,6 +96,9 @@ for run in range(len(T_red_space)):
     av_abs_m = np.append(av_abs_m, np.mean(np.abs(m_list[mask:])))
     av_cap = np.append(av_cap, (np.log(1 + np.sqrt(2)) / 2)**2*(np.mean(E_t_list[mask:]**2)-np.mean(E_t_list[mask:])**2))
     
+    av_E_t_unc = np.append(av_E_t_unc, np.std(E_t_list[mask:]))
+    av_m_unc = np.append(av_m_unc, np.std(m_list[mask:]))
+    
     E_t_list = np.array([])
     m_list = np.array([])
 
@@ -106,10 +116,6 @@ C_unc = np.sqrt(np.mean(av_cap**2) - np.mean(av_cap)**2)/np.sqrt(len(av_cap))
 
 #%%
 
-
-
-#%%
-
 T_red_plt = np.linspace(0.6, 1.4, num=100000)
 
 beta_c = np.log(1 + np.sqrt(2)) / 2
@@ -123,7 +129,7 @@ plt.axvline(1, color='red', linestyle='--', label='Critical Temperature T_c')
 
 for run in range(len(T_red_space)):
     plt.scatter(T_red_space[run] / T_c, av_cap[run] / n**2)
-    plt.errorbar(T_red_space[run] / T_c, av_cap[run] / n**2, yerr=C_unc/n**2)
+    plt.errorbar(T_red_space[run] / T_c, av_cap[run] / n**2, yerr=np.std(av_cap)/n**2)
 
 plt.plot(T_red_plt, 
          c_arr, 
@@ -152,7 +158,7 @@ M_theory = (
 plt.errorbar(
     T_red_space / T_c,
     av_abs_m,
-    yerr=np.sqrt(av_m_2 - av_m**2)/np.sqrt(len(av_m)),
+    yerr=av_m_unc,
     fmt='o',
     label='Monte Carlo'
 )
@@ -168,6 +174,53 @@ plt.xlabel(r'$T/T_c$')
 plt.ylabel(r'$|M|/N$')
 plt.xlim(0, 1.4)
 plt.ylim(bottom=0)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+#%%
+
+T_red_plt = np.linspace(0.01, 1.4, 1000)
+
+beta_mag = 1/8
+
+M_theory = np.zeros_like(T_red_plt)
+
+below_Tc = T_red_plt < 1
+T_actual = T_red_plt[below_Tc] * T_c
+
+M_theory = (
+    1 - T_red_plt
+)**beta_mag
+
+plt.errorbar(
+    T_red_space / T_c,
+    av_m,
+    yerr=av_m_unc,
+    fmt='o',
+    label='Monte Carlo'
+)
+
+plt.plot(
+    T_red_plt,
+    M_theory,
+    label='Exact theoretical model'
+)
+
+#%%
+
+plt.plot(
+    T_red_space/T_c,
+    av_E_t,
+    label='Exact theoretical model'
+)
+
+plt.errorbar(
+    T_red_space / T_c,
+    av_E_t,
+    yerr=av_E_t_unc
+)
+
 plt.legend()
 plt.tight_layout()
 plt.show()
