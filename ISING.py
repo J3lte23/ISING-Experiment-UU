@@ -1,225 +1,190 @@
+import os
 import numpy as np
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
+from concurrent.futures import ProcessPoolExecutor
 
-np.random.seed(100)
+#Parameters
+n = 2
+N = n**2
+kB = 1.0
 
-steps = 11
-mask = 8000
+T = 1.0
+steps = 81
+n_repeats = 40
 
-T_c = 2/np.log(1+np.sqrt(2)) 
+n_therm = 50000
+n_measure = 100000
+stride = N
 
-T_red_space = np.linspace(0.7, 1.3, steps)*T_c
+#Scan coupling around the expected critical value
+J_c_exact = 0.5 * kB * T * np.log(1 + np.sqrt(2))
+J_values = np.linspace(0.9, 1.1, steps) * J_c_exact
 
-n = 10
 
-E_t_list = np.array([])
-m_list = np.array([])
-av_E_t = np.array([])
-av_E_t_unc = np.array([])
-av_E_t_2 = np.array([])
-av_m = np.array([])
-av_m_unc = np.array([])
-av_abs_m_unc = np.array([])
-av_m_2 = np.array([])
-av_abs_m = np.array([])
-av_cap = np.array([])
-
-def total_energy():
-    global E_t
-    E_t = 0
-    for x in range(n):
-        for y in range(n):
-            s_i = state[x,y]
-            neighbours = [state[(x+1)%n, y], state[x, (y+1)%n]]
-            for neighbour in neighbours:
-                E_t += - J * s_i * neighbour     
-    return E_t
-
-def change_spin(state):
-    global E_t
-    x = np.random.randint(0,n)
-    y = np.random.randint(0,n)
-    neighbours = [state[(x+1)%n, y], state[(x-1)%n, y], state[x, (y+1)%n], state[x, (y-1)%n]]
-    D_E = 2 * J * state[x,y] * np.sum(neighbours)
-    if D_E < 0:
-        state[x,y] *= -1
-        E_t += D_E
-    elif np.random.random() < np.exp(-1 * D_E / T):
-        state[x, y] *= -1
-        E_t += D_E
-    else:
-        pass
-
-for run in range(len(T_red_space)):
-    J = 1 #J
-    T = T_red_space[run]
-
-    print(T_red_space[run]/T_c)
-
-    total_energy()
-
-    for i in range(20):
-        state = 2*np.random.randint(2, size=(n,n))-1
-        
-# =============================================================================
-#         state = np.ones_like(state)
-# =============================================================================
-        for i in range(10000):
-            change_spin(state)
-            E_t_list = np.append(E_t_list, E_t)
-            m_list = np.append(m_list, np.mean(state))
-        
-        plt.imshow(
-            state, 
-            origin='upper',
-            cmap='Grays'
+def total_energy(state, J):
+    return -J * np.sum(
+        state * (
+            np.roll(state, -1, axis=0)
+            + np.roll(state, -1, axis=1)
         )
-        plt.pause(0.001)
-        
-        av_E_t = np.append(av_E_t, np.mean(E_t_list[mask:]))
-        av_E_t_2 = np.append(av_E_t_2, np.mean(E_t_list[mask:]**2))
-        av_m = np.append(av_m, np.mean(m_list[mask:])) 
-        av_abs_m = np.append(av_abs_m, np.mean(np.abs(m_list[mask:])))
-        av_cap = np.append(av_cap, (np.log(1 + np.sqrt(2)) / 2)**2*(np.mean(E_t_list[mask:]**2)-np.mean(E_t_list[mask:])**2))
-        
-        av_E_t_unc = np.append(av_E_t_unc, np.std(E_t_list[mask:]))
-        av_abs_m_unc = np.append(av_abs_m_unc, np.std(np.abs(m_list[mask:])))
-        av_m_unc = np.append(av_m_unc, np.std(m_list[mask:]))
-            
-        E_t_list = np.array([])
-        m_list = np.array([])
-
-unc_list = np.sqrt(av_E_t_2 - av_E_t**2)
-
-print(av_E_t)
-print(av_E_t_2)
-print(av_m)
-print(av_abs_m)
-print(av_cap)
-
-print(unc_list)
-
-C_unc = np.sqrt(np.mean(av_cap**2) - np.mean(av_cap)**2)/np.sqrt(len(av_cap))
-
-#%%
-
-T_red_plt = np.linspace(0.6, 1.4, num=100000)
-
-beta_c = np.log(1 + np.sqrt(2)) / 2
-
-c_arr = (
-    8 / np.pi * (beta_c * J)**2
-    * np.log(1 / np.abs(T_red_plt - 1))
-)
-
-plt.axvline(1, color='red', linestyle='--', label='Critical Temperature T_c')
-
-for run in range(len(T_red_space)):
-    plt.scatter(T_red_space[run] / T_c, av_cap[run] / n**2)
-    plt.errorbar(T_red_space[run] / T_c, av_cap[run] / n**2, yerr=np.std(av_cap)/n**2)
-
-plt.plot(T_red_plt, 
-         c_arr, 
-         label='Theoretical Model'
-)
-
-plt.xlabel(r'$T/T_c$')
-plt.ylabel(r'$C/(Nk_B)$')
-plt.legend()
-plt.show()
-
-#%%
-
-T_red_plt = np.linspace(0.01, 1.4, 1000)
-
-beta_mag = 1/8
-
-M_theory = np.zeros_like(T_red_plt)
-
-below_Tc = T_red_plt < 1
-T_actual = T_red_plt[below_Tc] * T_c
-
-M_theory = (
-    1 - T_red_plt
-)**beta_mag
-
-plt.errorbar(
-    T_red_space / T_c,
-    av_abs_m,
-    yerr=av_abs_m_unc,
-    fmt='o',
-    label='Monte Carlo'
-)
-
-plt.plot(
-    T_red_plt,
-    M_theory,
-    label='Exact theoretical model'
-)
-
-plt.axvline(1, color='red', linestyle='--', label=r'$T_c$')
-plt.xlabel(r'$T/T_c$')
-plt.ylabel(r'$|M|/N$')
-plt.xlim(0, 1.4)
-plt.ylim(bottom=0)
-plt.legend()
-plt.tight_layout()
-plt.show()
-
-#%%
-#Useless plot
-# =============================================================================
-# T_red_plt = np.linspace(0.01, 1.4, 1000)
-# 
-# beta_mag = 1/8
-# 
-# M_theory = np.zeros_like(T_red_plt)
-# 
-# below_Tc = T_red_plt < 1
-# T_actual = T_red_plt[below_Tc] * T_c
-# 
-# M_theory = (
-#     1 - T_red_plt
-# )**beta_mag
-# 
-# plt.errorbar(
-#     T_red_space / T_c,
-#     av_m,
-#     yerr=av_m_unc,
-#     fmt='o',
-#     label='Monte Carlo'
-# )
-# 
-# plt.plot(
-#     T_red_plt,
-#     M_theory,
-#     label='Exact theoretical model'
-# )
-# 
-# plt.show()
-# =============================================================================
-
-#%%
+    )
 
 
-plt.plot(
-    T_red_space,
-    av_E_t,
-)
+def change_spin(state, E, T, J, rng):
+    x = rng.integers(n)
+    y = rng.integers(n)
 
-f_E = 4*J*np.sinh(4*beta_c*J)/(3+np.cosh(4*beta_c*J))
+    neighbours = (
+        state[(x + 1) % n, y]
+        + state[(x - 1) % n, y]
+        + state[x, (y + 1) % n]
+        + state[x, (y - 1) % n]
+    )
 
-plt.plot(
-    T_red_space,
-    f_E
-)
+    dE = 2 * J * state[x, y] * neighbours
 
-plt.errorbar(
-    T_red_space / T_c,
-    av_E_t,
-    yerr=av_E_t_unc
-)
+    if dE <= 0 or rng.random() < np.exp(-dE / (kB * T)):
+        state[x, y] *= -1
+        E += dE
 
-plt.legend()
-plt.tight_layout()
-plt.show()
+    return E
+
+
+def simulate_one(task):
+    J, seed = task
+    rng = np.random.default_rng(seed)
+
+    state = 2 * rng.integers(0, 2, size=(n, n)) - 1
+    E = total_energy(state, J)
+
+    #Thermalization
+    for i in range(n_therm):
+        E = change_spin(state, E, T, J, rng)
+
+    energies = []
+    magnetizations = []
+
+    #Measurements
+    for step in range(n_measure):
+        E = change_spin(state, E, T, J, rng)
+
+        if (step + 1) % stride == 0:
+            energies.append(E)
+            magnetizations.append(np.mean(state))
+
+    energies = np.asarray(energies)
+    magnetizations = np.asarray(magnetizations)
+
+    mean_E = np.mean(energies) / N
+    mean_abs_m = np.mean(np.abs(magnetizations))
+
+    #Heat capacity per spin, in units of kB
+    C = (
+        np.mean(energies**2) - np.mean(energies)**2
+    ) / (N * kB * T**2)
+
+    return J, mean_E, mean_abs_m, C
+
+
+def main():
+    seed_sequence = np.random.SeedSequence(100)
+    seeds = seed_sequence.generate_state(
+        steps * n_repeats, dtype=np.uint64
+    )
+
+    tasks = [
+        (J, int(seeds[i * n_repeats + rep]))
+        for i, J in enumerate(J_values)
+        for rep in range(n_repeats)
+    ]
+
+    n_workers = min(os.cpu_count() or 1, len(tasks))
+
+    print(f"Fixed temperature T = {T}")
+    print(f"Exact critical coupling J_c = {J_c_exact:.8f}")
+    print(f"Using {n_workers} worker processes")
+    print(f"Running {len(tasks)} independent simulations")
+
+    with ProcessPoolExecutor(max_workers=n_workers) as pool:
+        results = list(pool.map(simulate_one, tasks))
+
+    energy = np.zeros(steps)
+    energy_err = np.zeros(steps)
+    mag = np.zeros(steps)
+    mag_err = np.zeros(steps)
+    heat_cap = np.zeros(steps)
+    heat_cap_err = np.zeros(steps)
+
+    for i in range(steps):
+        group = results[i * n_repeats:(i + 1) * n_repeats]
+
+        e = np.array([r[1] for r in group])
+        m = np.array([r[2] for r in group])
+        c = np.array([r[3] for r in group])
+
+        energy[i] = np.mean(e)
+        energy_err[i] = np.std(e, ddof=1) / np.sqrt(n_repeats)
+
+        mag[i] = np.mean(m)
+        mag_err[i] = np.std(m, ddof=1) / np.sqrt(n_repeats)
+
+        heat_cap[i] = np.mean(c)
+        heat_cap_err[i] = np.std(c, ddof=1) / np.sqrt(n_repeats)
+
+    #Finite-size estimate: coupling at maximum measured heat capacity
+    i_peak = np.argmax(heat_cap)
+    J_c_est = J_values[i_peak]
+
+    print(f"Estimated J_c from heat-capacity peak = {J_c_est:.8f}")
+    print(f"Exact J_c = {J_c_exact:.8f}")
+    print(f"Difference = {J_c_est - J_c_exact:.8f}")
+
+    J_red = J_values / J_c_exact
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.5))
+
+    axes[0].errorbar(
+        J_red, energy, yerr=energy_err,
+        fmt="o", capsize=3, label="Monte Carlo"
+    )
+    axes[0].axvline(1, color="red", linestyle="--", label=r"Exact $J_c$")
+    axes[0].set(
+        xlabel=r"$J/J_c$", ylabel=r"$\langle E\rangle/N$",
+        title="Energy"
+    )
+    axes[0].legend(fontsize=8)
+
+    axes[1].errorbar(
+        J_red, mag, yerr=mag_err,
+        fmt="o", capsize=3, label="Monte Carlo"
+    )
+    axes[1].axvline(1, color="red", linestyle="--", label=r"Exact $J_c$")
+    axes[1].set(
+        xlabel=r"$J/J_c$",
+        title="Absolute magnetization"
+    )
+    axes[1].legend(fontsize=8)
+
+    axes[2].errorbar(
+        J_red, heat_cap, yerr=heat_cap_err,
+        fmt="o", capsize=3, label="Monte Carlo"
+    )
+    axes[2].axvline(
+        1, color="red", linestyle="--", label=r"Exact $J_c$"
+    )
+    axes[2].axvline(
+        J_c_est / J_c_exact, color="black", linestyle=":",
+        label=r"Heat-capacity peak"
+    )
+    axes[2].set(
+        xlabel=r"$J/J_c$", ylabel=r"$C/(Nk_B)$",
+        title="Heat capacity"
+    )
+    axes[2].legend(fontsize=8)
+
+    plt.tight_layout()
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
