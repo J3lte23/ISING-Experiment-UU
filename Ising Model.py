@@ -19,7 +19,7 @@ T_c_exact = 2 * J_fixed / (
 )
 
 #Lattice sizes
-L_values = [16, 24, 32, 48, 64, 96]
+L_values = [16, 24, 32, 48]
 
 #Number of scan points
 steps = 41
@@ -31,9 +31,9 @@ J_values = np.linspace(0.94, 1.06, steps) * J_c_exact
 T_values = np.linspace(0.94, 1.06, steps) * T_c_exact
 
 #Monte Carlo parameters
-n_repeats = 20
-n_therm = 2000
-n_measure = 3000
+n_repeats = 30
+n_therm = 3000
+n_measure = 2000
 stride = 5
 
 #Chooses amount of cores used for Monte Carlo and data processing
@@ -173,6 +173,7 @@ def simulate_one_numba(
     if m2 > 0.0:
         binder = 1.0 - m4 / (3.0 * m2**2)
 
+    #Returns all important values
     return (
         L,
         energy_per_spin,
@@ -327,7 +328,7 @@ def main():
         J_values, mode="J", fixed_value=T_fixed
     )
 
-    L_ref = 20
+    L_ref = 32
     heat = data_J[L_ref]["heat"]
 
     peak_idx = np.nanargmax(heat)
