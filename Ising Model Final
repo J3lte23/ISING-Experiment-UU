@@ -1,0 +1,681 @@
+import os
+
+#Limit threads used by numerical libraries in worker processes
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
+import csv
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+
+import numpy as np
+import matplotlib.pyplot as plt
+from numba import njit
+from scipy.optimize import curve_fit
+
+
+#Configuration parameters
+CONFIG = {
+    "sizes": [12, 16, 24, 32, 48],
+    "K_min": 0.415,
+    "K_max": 0.466,
+    "n_temperatures": 51,
+    "replicas": 60,
+    "equil_sweeps": 4000,
+    "measure_sweeps": 10000,
+    "seed": 20261030,
+    "workers": None
+}
+
+
+@njit
+def total_energy(spins):
+    #Get the size of the lattice
+    L = spins.shape[0]
+
+    #Caulculating energy of the entire lattice
+    E = 0
+    #Count each bond once; right and up neighbours.
+    for i in range(L):
+        for j in range(L):
+            s = spins[i, j]
+
+            E -= s * (
+                spins[(i + 1)%L, j]
+                + spins[i, (j + 1)%L]
+            )
+
+    return E
+
+#Equilibration plot using the energy to determine if thermalization is successful
+def plot_equilibration(L, K, equil_sweeps, seed=12345):
+    np.random.seed(seed)
+    N = L * L
+
+    #Initialise random spins
+    spins = np.empty((L, L), dtype=np.int8)
+
+    for i in range(L):
+        for j in range(L):
+            spins[i, j] = 2*np.random.randint(0,2)-1
+    
+    E = total_energy(spins)
+
+    energies = np.empty(equil_sweeps)
+
+    #Perform equilibration sweeps
+    for sweep in range(equil_sweeps):
+        for p in range(N):
+            i = np.random.randint(0, L)
+            j = np.random.randint(0, L)
+
+            s = spins[i, j]
+
+            nn = (
+                spins[(i + 1) % L, j]
+                + spins[(i - 1) % L, j]
+                + spins[i, (j + 1) % L]
+                + spins[i, (j - 1) % L]
+            )
+
+            dE = 2 * s * nn
+
+            if dE <= 0 or np.random.random() < np.exp(-K * dE):
+                spins[i, j] = -s
+                E += dE
+
+        #Record energy per spin after each sweep
+        energies[sweep] = E / N
+
+    #Plot
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    ax.plot(
+        np.arange(1, equil_sweeps + 1),
+        energies,
+        linewidth=0.8,
+        alpha=0.7,
+        label="Energy per spin"
+    )
+
+    running_mean = np.cumsum(energies) / np.arange(
+        1, equil_sweeps + 1
+    )
+
+    ax.plot(
+        np.arange(1, equil_sweeps + 1),
+        running_mean,
+        color="red",
+        linewidth=2,
+        label="Running mean"
+    )
+
+    ax.set_xlabel("Monte Carlo sweep")
+    ax.set_ylabel(r"Energy per spin, $E/N$")
+    ax.set_title(f"Equilibration: L={L}, K={K:.5f}")
+    ax.grid(alpha=0.25)
+    ax.legend()
+
+    fig.tight_layout()
+    fig.savefig("equilibration.png", dpi=200)
+    plt.show()
+    plt.close(fig)
+
+@njit
+def run_chain(L, K, equil_sweeps, measure_sweeps, seed):
+    #Using random seed for reproducibility
+    np.random.seed(seed)
+
+    #Total number of spins
+    N = L * L
+
+    #Generate spin lattice in an array with equal chance to give +1, -1
+    spins = np.empty((L, L), dtype=np.int8)
+
+    for i in range(L):
+        for j in range(L):
+            spins[i, j] = 2*np.random.randint(0,2)-1
+
+    #Calculate the initial total energy
+    E = total_energy(spins)
+
+    #Equilibration steps (see also the flowchart in the article)
+    for sweep in range(equil_sweeps):
+        for attempt in range(N):
+            #Choose a random spin with coordinates i, j
+            i = np.random.randint(0, L)
+            j = np.random.randint(0, L)
+            s = spins[i, j]
+
+            #Calculate the sum of the four nearest neighbours (nn)
+            nn = (
+                spins[(i + 1) % L, j]
+                + spins[(i - 1) % L, j]
+                + spins[i, (j + 1) % L]
+                + spins[i, (j - 1) % L]
+            )
+
+            #Calculate the energy change caused by flipping
+            dE = 2 * s * nn
+
+            #Metropolis acceptance rule (as specified in the instructions)
+            if dE <= 0:
+                spins[i, j] = -s
+                E += dE
+
+            else:
+                p = np.exp(-K * dE)
+                R = np.random.random()
+
+                if R < p:
+                    spins[i, j] = -s
+                    E += dE
+
+    #Measurement data
+    sum_e = 0
+    sum_e2 = 0
+    sum_m2 = 0
+    sum_m4 = 0
+    sum_absm = 0
+
+    #Measurements steps (see also the flowchart in the article)
+    for sweep in range(measure_sweeps):
+        #Perform N spin-flip attempts per sweep
+        for attempt in range(N):
+            #Choose random spin on lattice
+            i = np.random.randint(0, L)
+            j = np.random.randint(0, L)
+            s = spins[i, j]
+
+            #Calculate the sum of nearest neighbours (nn)
+            nn = (
+                spins[(i + 1) % L, j]
+                + spins[(i - 1) % L, j]
+                + spins[i, (j + 1) % L]
+                + spins[i, (j - 1) % L]
+            )
+
+            dE = 2 * s * nn
+
+            #Metropolis acceptance rule
+            if dE <= 0:
+                spins[i, j] = -s
+                E += dE
+
+            else:
+                p = np.exp(-K * dE)
+                R = np.random.random()
+
+                if R < p:
+                    spins[i, j] = -s
+                    E += dE
+
+        #Calculate total magnetisation
+        M = 0
+        for i in range(L):
+            for j in range(L):
+                M += spins[i, j]
+
+        #Energy and magnetisation per spin
+        e = E / N
+        m = M / N
+
+        #Accumulate observables
+        sum_e += e
+        sum_e2 += e * e
+        sum_m2 += m * m
+        sum_m4 += m ** 4
+        sum_absm += abs(m)
+
+    #Amount of measurements
+    n = float(measure_sweeps)
+    
+    #Return all observables for plots and Binder cumulant
+    return (
+        sum_e / n,
+        sum_e2 / n,
+        sum_m2 / n,
+        sum_m4 / n,
+        sum_absm / n,
+    )
+
+
+
+
+def simulate_task(task):
+    L, K, replica, cfg = task
+
+    #Use a different seed for all runs so there are no repeat runs, but base it off the same parameters
+    #(using some large primes, so repeats are unlikely and avoiding overflow errors)
+    seed = (
+        cfg["seed"]
+        + 1000003 * L
+        + 10007 * replica
+        + int(round(K * 1000000)) * 17
+    )%(2**32 - 1)
+
+    #Measurement run using configurations
+    values = run_chain(
+        L,
+        K,
+        cfg["equil_sweeps"],
+        cfg["measure_sweeps"],
+        int(seed),
+    )
+
+    return L, K, replica, values
+
+#Running all processes using multiple cores of the CPU
+def run_all(cfg):
+    #Investigative area of the temperatures as specified by the configuration
+    temperatures = np.linspace(
+        cfg["K_min"],
+        cfg["K_max"],
+        cfg["n_temperatures"],
+    )
+
+    #Defining the tasks
+    tasks = [
+        (L, float(K), rep, cfg)
+        for L in cfg["sizes"]
+        for K in temperatures
+        for rep in range(cfg["replicas"])
+    ]
+
+    workers = cfg["workers"] or os.cpu_count() or 1
+    workers = max(1, min(workers, len(tasks)))
+
+    print("Total chains:", len(tasks))
+    print("CPU workers:", workers)
+
+    context = mp.get_context("spawn")
+    results = []
+
+    #Print progression (not necessary for final draft)
+    with ProcessPoolExecutor(max_workers=workers, mp_context=context) as pool:
+        for count, result in enumerate(pool.map(simulate_task, tasks, chunksize=1), start=1):
+            results.append(result)
+            if count % max(1, len(tasks) // 20) == 0:
+                print(f"Progress: {count}/{len(tasks)}")
+
+    return temperatures, results
+
+
+
+def summarize(temperatures, results, cfg):
+    data = {}
+    rows = []
+
+    rng = np.random.default_rng(cfg["seed"] + 18888888)
+    nboot = 1000
+    R = cfg["replicas"]
+
+    for L in cfg["sizes"]:
+        data[L] = {}
+
+        for K in temperatures:
+            matching = [
+                values
+                for l, k, rep, values in results
+                if l == L and np.isclose(k, K)
+            ]
+
+            #Bootstrap complete independent replicas.
+            #Using bootstrap analysis to find uncertainties for the found observables, as discussed in
+            #Computer Physics Communications, S. Mignani, R. Rosa, 1995
+            #https://www.sciencedirect.com/science/article/pii/0010465595001147
+            
+            #Inspiration drawn from https://stackoverflow.com/questions/40982819/using-bootstrapping-random-choice
+            #and https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html
+        
+            a = np.asarray(matching, dtype=float)
+            if len(a) != R:
+                raise RuntimeError("Missing replica results.")
+
+            mean = a.mean(axis=0)
+
+            idx = rng.integers(0, R, size=(nboot, R))
+            boot = a[idx].mean(axis=1)
+
+            e, e2, m2, m4, abs_m = mean
+
+            U = 1.0 - m4 / (3.0 * m2**2)
+            Cv = L**2 * K**2 * (e2 - e**2)
+            chi = L**2 * K * m2
+
+            bU = 1.0 - boot[:, 3] / ( 3.0 * boot[:, 2]**2)
+            bCv = L**2 * K**2 * (boot[:, 1] - boot[:, 0]**2)
+            bchi = L**2 * K * boot[:, 2]
+
+            def se(x):
+                return float(np.std(x, ddof=1))
+
+            item = {
+                "K": float(K),
+                "E": float(e),
+                "E_se": se(boot[:, 0]),
+                "abs_m": float(abs_m),
+                "abs_m_se": se(boot[:, 4]),
+                "Cv": float(Cv),
+                "Cv_se": se(bCv),
+                "chi": float(chi),
+                "chi_se": se(bchi),
+                "U": float(U),
+                "U_se": se(bU),
+            }
+
+            data[L][float(K)] = item
+            rows.append({"L": L, **item})
+
+    with open("ising_observables.csv", "w", newline="") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=rows[0].keys()
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return data
+
+
+#Using the Binder crossing method, as seen in, for example, K. Binder, 1981 in the Zeitschrift für Physik B Condensed Matter
+#https://link.springer.com/article/10.1007/BF01293604
+#Python code loosely inspired by https://alps.comp-phys.org/tutorials/mcs/mc07/
+def crossing_from_curves(K, U1, U2):
+    difference = U1 - U2
+    for i in range(len(K) - 1):
+        if difference[i] == 0:
+            return float(K[i])
+
+        if difference[i] * difference[i + 1] < 0:
+            return float(
+                K[i]
+                - difference[i]
+                * (K[i + 1] - K[i])
+                / (difference[i + 1] - difference[i])
+            )
+
+    return np.nan
+
+
+def find_crossings(data, sizes):
+    rng = np.random.default_rng(12345)
+    nboot = 2000
+
+    K = np.array(sorted(next(iter(data.values())).keys()))
+    records = []
+
+    for L1, L2 in zip(sizes[:-1], sizes[1:]):
+        U1 = np.array([data[L1][k]["U"] for k in K])
+        U2 = np.array([data[L2][k]["U"] for k in K])
+
+        s1 = np.array([data[L1][k]["U_se"] for k in K])
+        s2 = np.array([data[L2][k]["U_se"] for k in K])
+
+        crossing = crossing_from_curves(K, U1, U2)
+
+        if not np.isfinite(crossing):
+            print(f"No crossing found for L={L1}, {L2}")
+            continue
+
+        boot_crossings = []
+
+        for _ in range(nboot):
+            u1 = U1 + rng.normal(0, s1)
+            u2 = U2 + rng.normal(0, s2)
+
+            c = crossing_from_curves(K, u1, u2)
+            if np.isfinite(c):
+                boot_crossings.append(c)
+
+        crossing_se = (
+            float(np.std(boot_crossings, ddof=1))
+            if len(boot_crossings) >= 30
+            else np.nan
+        )
+
+        records.append({
+            "L1": L1,
+            "L2": L2,
+            "L_eff": float(np.sqrt(L1 * L2)),
+            "K_cross": crossing,
+            "K_cross_se": crossing_se,
+        })
+
+    if records:
+        with open("binder_crossings.csv", "w", newline="") as f:
+            writer = csv.DictWriter(
+                f, fieldnames=records[0].keys()
+            )
+            writer.writeheader()
+            writer.writerows(records)
+
+    return records
+
+
+def extrapolate_crossings(records):
+    valid = [
+        r for r in records
+        if np.isfinite(r["K_cross"])
+        and np.isfinite(r["K_cross_se"])
+        and r["K_cross_se"] > 0
+    ]
+
+    if len(valid) < 3:
+        print("Not enough reliable crossings for extrapolation.")
+        return None
+
+    x = np.array([
+        1.0 / r["L_eff"]**3 for r in valid
+    ])
+    y = np.array([
+        r["K_cross"] for r in valid
+    ])
+    sy = np.array([
+        r["K_cross_se"] for r in valid
+    ])
+
+    def model(x, Kc, a):
+        return Kc + a * x
+
+    popt, pcov = curve_fit(
+        model,
+        x,
+        y,
+        sigma=sy,
+        absolute_sigma=True,
+        p0=[0.441, 1.0],
+        maxfev=20000,
+    )
+
+    Kc, slope = popt
+    Kc_se = float(np.sqrt(max(0.0, pcov[0, 0])))
+
+    residuals = (y - model(x, *popt)) / sy
+    dof = len(y) - len(popt)
+
+    chi2_red = (
+        float(np.sum(residuals**2) / dof)
+        if dof > 0 else np.nan
+    )
+
+    return {
+        "Kc": float(Kc),
+        "Kc_se_fit": Kc_se,
+        "slope": float(slope),
+        "chi2_red": chi2_red,
+        "x": x,
+        "y": y,
+        "sy": sy,
+    }
+
+
+def plot_binder(data, sizes):
+    K = np.array(sorted(next(iter(data.values())).keys()))
+    colors = plt.cm.viridis(
+        np.linspace(0.05, 0.95, len(sizes))
+    )
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    for L, color in zip(sizes, colors):
+        U = np.array([data[L][k]["U"] for k in K])
+        Uerr = np.array([data[L][k]["U_se"] for k in K])
+
+        ax.errorbar(
+            K, U, yerr=Uerr,
+            fmt="o-", ms=3, capsize=2,
+            label=f"L={L}", color=color
+        )
+
+    ax.set_xlabel(r"$K=J/(k_BT)$")
+    ax.set_ylabel(r"Binder cumulant $U_4$")
+    ax.set_title("Binder cumulant crossings")
+    ax.legend()
+    ax.grid(alpha=0.25)
+
+    fig.tight_layout()
+    fig.savefig("binder_cumulant.png", dpi=200)
+    plt.close(fig)
+
+def plot_results(data, sizes, fit):
+    K = np.array(sorted(next(iter(data.values())).keys()))
+    colors = plt.cm.viridis(
+        np.linspace(0.05, 0.95, len(sizes))
+    )
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
+
+    for L, color in zip(sizes, colors):
+        series = [data[L][k] for k in K]
+
+        axes[0].plot(
+            K, [q["E"] for q in series],
+            "o-", ms=2.5, label=f"L={L}", color=color
+        )
+        axes[1].plot(
+            K, [q["Cv"] for q in series],
+            "o-", ms=2.5, label=f"L={L}", color=color
+        )
+        axes[2].plot(
+            K, [q["abs_m"] for q in series],
+            "o-", ms=2.5, label=f"L={L}", color=color
+        )
+
+    axes[0].set_ylabel(r"$\langle E\rangle/N$")
+    axes[1].set_ylabel(r"$C_V$ per spin")
+    axes[2].set_ylabel(r"$\langle |m|\rangle$")
+
+    for ax in axes:
+        ax.set_xlabel(r"$K=J/(k_BT)$")
+        ax.grid(alpha=0.25)
+
+    axes[0].legend()
+    fig.tight_layout()
+    fig.savefig("thermodynamic_observables.png", dpi=200)
+    plt.close(fig)
+
+    if fit is not None:
+        fig, ax = plt.subplots(figsize=(7, 5))
+
+        ax.errorbar(
+            fit["x"], fit["y"], yerr=fit["sy"],
+            fmt="o", capsize=3, label="Binder crossings"
+        )
+
+        xx = np.linspace(0, max(fit["x"]) * 1.08, 200)
+
+        ax.plot(
+            xx,
+            fit["Kc"] + fit["slope"] * xx,
+            "-",
+            label=rf"Fit: $K_c={fit['Kc']:.5f}$",
+        )
+
+        exact_Kc = 0.5 * np.log(1 + np.sqrt(2))
+
+        ax.axhline(
+            exact_Kc,
+            color="black",
+            linestyle="--",
+            label="Exact infinite-lattice value",
+        )
+
+        ax.set_xlabel(r"$1/L_{\mathrm{eff}}^3$")
+        ax.set_ylabel(r"$K_{\mathrm{cross}}$")
+        ax.legend()
+        ax.grid(alpha=0.25)
+
+        fig.tight_layout()
+        fig.savefig("critical_extrapolation.png", dpi=200)
+        plt.close(fig)
+
+
+def main():
+    cfg = CONFIG
+
+# =============================================================================
+#     # Diagnostic equilibration plot (Appendix)
+#     plot_equilibration(
+#         L=48,
+#         K=0.44068679,
+#         equil_sweeps=cfg["equil_sweeps"],
+#         seed=cfg["seed"]
+#     )
+# =============================================================================
+
+    temperatures, results = run_all(cfg)
+
+    data = summarize(temperatures, results, cfg)
+
+    records = find_crossings(data, cfg["sizes"])
+
+    fit = extrapolate_crossings(records)
+
+    plot_binder(data, cfg["sizes"])
+    plot_results(data, cfg["sizes"], fit)
+
+    exact_Kc = 0.5 * np.log(1 + np.sqrt(2))
+    exact_Tred_c = 1.0 / exact_Kc
+
+    print("\nCritical Point ------------------------------------")
+    print(f"Exact K_c = {exact_Kc:.8f}")
+    print(f"Exact T_red,c = {exact_Tred_c:.8f}")
+
+    print("\nBinder crossing estimates:")
+
+    for r in records:
+        print(
+            f"L={r['L1']:3d}, {r['L2']:3d}: "
+            f"K_cross={r['K_cross']:.6f} "
+            f"+/- {r['K_cross_se']:.6f}"
+        )
+
+    if fit is not None:
+        Kc = fit["Kc"]
+        sigma = fit["Kc_se_fit"]
+
+        print("\nFinite-size extrapolation:")
+        print(f"K_c = {Kc:.6f} +/- {sigma:.6f}")
+        print(f"Reduced chi-squared = {fit['chi2_red']:.3f}")
+
+        if Kc > 0:
+            Tred = 1.0 / Kc
+            Tred_se = sigma / Kc**2
+
+            print(
+                f"T_red,c = {Tred:.6f} "
+                f"+/- {Tred_se:.6f}"
+            )
+
+        print(
+            "Check sensitivity to lattice sizes, sampling duration, "
+            "and the assumed finite-size scaling law."
+        )
+
+    print("\nAll output files saved in the current directory.")
+
+
+if __name__ == "__main__":
+    mp.freeze_support()
+    main()
